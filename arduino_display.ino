@@ -1,4 +1,5 @@
 #include "SPI.h"
+#include "image.h"
 #include "Adafruit_GFX.h"
 #include "Adafruit_GC9A01A.h"
 
