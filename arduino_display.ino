@@ -5,7 +5,6 @@
 
 #include <Scheduler.h>
 #include <Servo.h>
-#include <Arduino.h>
 
 #define TFT_CS 23  // Chip select
 #define TFT_DC 22  // Data/command
@@ -29,7 +28,7 @@ int potVal1, potVal2;  // variable to read the value from the analog pin
 
 
 //定义图片
-extern const unsigned char gImage[];
+extern const unsigned char gImage_green[];
 #define IMAGE_WIDTH 240
 #define IMAGE_HEIGHT 240
 GFXcanvas16 demo8(240, 240);//创建画布
@@ -121,16 +120,17 @@ unsigned long photoText(){
   unsigned long start = micros();
 
   for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT; i++) {
-    imageBuffer[i] = (gImage[i * 2] << 8) | gImage[i * 2 + 1];  // 组合两个字节为一个 16 位的值
+    uint16_t lowByte = gImage_image[i * 2];
+    uint16_t highByte = gImage_image[i * 2 + 1];
+    imageBuffer[i] =  (highByte << 8) | lowByte;  // 组合两个字节为一个 16 位的值
     }
-  Serial.println(imageBuffer);
-  demo8.fillScreen(0x0000);//初始化画布为黑色背景
-  demo8.setRotation(1);
 
+  demo8.fillScreen(0x0000);//初始化画布为黑色背景
+  //demo8.setRotation(1);
   
-  demo8.drawBitmap(0,0,imageBuffer,240,240);  
+  // demo8.drawBitmap(0,0,imageBuffer,240,240);  
   
-  tft_left.drawRGBBitmap(0, 0, demo8.getBuffer(), demo8.width(), demo8.height()); 
+  tft_left.drawRGBBitmap(0, 0, imageBuffer, demo8.width(), demo8.height()); 
   // 将画布内容绘制到屏幕
   return micros() - start;
   }
