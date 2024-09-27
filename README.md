@@ -1,19 +1,18 @@
 # arduino_display
 
-
-Í¼Æ¬¸ñÊ½£º1£º1
-»ñÈ¡Í¼Æ¬ÏñËØ¶ÔÓ¦Êı×é£ºImage2Lcd 2.9.rar
-
-
 Arduino driver of two round displays to show eye emojis.
-½ÓÏß£º
+
+* Aspect ratio of images `1ï¼š1`
+* Use the tool `Image2Lcd` to convert images into C arrays
+* Pin connection:
+```C
  TFT_CS 23  // Chip select
  TFT_DC 22  // Data/command
  TFT_BL 24  // Backlight control
  ODOR_SENSOR A8
  POT1 A0
  POT2 A1
- UP 40 //ÎåÏò°´¼ü
+ UP 40 //äº”å‘æŒ‰é”®
  DOWN 42
  LEFT 44
  RIGHT 46
@@ -22,8 +21,8 @@ Arduino driver of two round displays to show eye emojis.
  RST 52
  servo1 2
  servo2 3
- 
-ÊµÏÖ¹¦ÄÜ£º
- 1.ÏÔÊ¾ÑÛÉñÍ¼Æ¬photoText£¨£©
- 2.ÇĞ»»Í¼Æ¬ change_image()
- 3.ÒÆ¶¯Í¼Æ¬ move_image()
+``` 
+* Functionsï¼š
+ 1. æ˜¾ç¤ºçœ¼ç¥å›¾ç‰‡ photoText()
+ 2. åˆ‡æ¢å›¾ç‰‡ change_image()
+ 3. ç§»åŠ¨å›¾ç‰‡ move_image()
