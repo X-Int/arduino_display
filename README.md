@@ -1,19 +1,19 @@
 # arduino_display
 
 
-Í¼Æ¬¸ñÊ½£º1£º1
-»ñÈ¡Í¼Æ¬ÏñËØ¶ÔÓ¦Êý×é£ºImage2Lcd 2.9.rar
+Í¼Æ¬ï¿½ï¿½Ê½ï¿½ï¿½1ï¿½ï¿½1
+ï¿½ï¿½È¡Í¼Æ¬ï¿½ï¿½ï¿½Ø¶ï¿½Ó¦ï¿½ï¿½ï¿½é£ºImage2Lcd 2.9.rar
 
 
 Arduino driver of two round displays to show eye emojis.
-½ÓÏß£º
+ï¿½ï¿½ï¿½ï¿½?ï¿½?
  TFT_CS 23  // Chip select
  TFT_DC 22  // Data/command
  TFT_BL 24  // Backlight control
  ODOR_SENSOR A8
  POT1 A0
  POT2 A1
- UP 40 //ÎåÏò°´¼ü
+ UP 40 //ï¿½ï¿½ï¿½ò°´¼ï¿½
  DOWN 42
  LEFT 44
  RIGHT 46
@@ -23,7 +23,7 @@ Arduino driver of two round displays to show eye emojis.
  servo1 2
  servo2 3
  
-ÊµÏÖ¹¦ÄÜ£º
- 1.ÏÔÊ¾ÑÛÉñÍ¼Æ¬photoText£¨£©
- 2.ÇÐ»»Í¼Æ¬ change_image()
- 3.ÒÆ¶¯Í¼Æ¬ move_image()
+Êµï¿½Ö¹ï¿½ï¿½ï¿½?ï¿½?
+ 1.ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½Í¼Æ¬photoTextï¿½ï¿½ï¿½ï¿½
+ 2.ï¿½Ð»ï¿½Í¼Æ¬ change_image()
+ 3.ï¿½Æ¶ï¿½Í¼Æ¬ move_image()
