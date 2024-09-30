@@ -56,7 +56,6 @@ int count = 1;
 int potVal1, potVal2;  // variable to read the value from the analog pin
 
 //定义图片
-<<<<<<< HEAD
 extern const unsigned char gImage_eyes1[];
 extern const unsigned char gImage_eyes2[];
 extern const unsigned char gImage_eyes3[];
@@ -73,21 +72,6 @@ const unsigned char* images[]={
     gImage_eyes4,
     gImage_eyes5,
   }; 
-const int numImages = sizeof(images) / sizeof(images[0]);
-int currentImageIndex = 0;
- 
-=======
-extern const unsigned char gImage_minion[];
-extern const unsigned char gImage_image[];
-extern const unsigned char gImage_eye2[];
-extern const unsigned char gImage_eye3[];
-//定义图片指针
-const unsigned char* images[] = {
-  gImage_minion,
-  gImage_image,
-  gImage_eye2,
-  gImage_eye3
-};
 const int numImages = sizeof(images) / sizeof(images[0]);
 int currentImageIndex = 0;
 
@@ -117,7 +101,6 @@ void setup() {
   //设定五向按键所接串口为输出、上拉电阻模式
   for (int i = 40; i <= 52; i += 2) { pinMode(i, INPUT_PULLUP); }
 
-
 //#if defined(TFT1_BL)
 //  pinMode(TFT1_BL, OUTPUT);
 //  digitalWrite(TFT1_BL, HIGH);  // Backlight on
@@ -134,7 +117,7 @@ void setup() {
 
 void loop(void) {
   tft_left.setRotation(0);
-// tft_right.setRotation(3);
+  // tft_right.setRotation(3);
   //testText();
   //photoText();
   //Serial.println(numImages);
@@ -177,10 +160,7 @@ unsigned long photoText() {
   //tft_right.fillScreen(GC9A01A_BLACK);
   unsigned long start = micros();
   change_uint16(gImage_eyes1);
-  demo8.fillScreen(0x0000);//初始化画布为黑色背景
-  tft_left.drawRGBBitmap(0, 0, imageBuffer, demo8.width(), demo8.height()); 
-  //tft_right.drawRGBBitmap(0, 0, imageBuffer, demo8.width(), demo8.height()); 
-  change_uint16(gImage_minion);
+  //demo8.fillScreen(0x0000);//初始化画布为黑色背景
   canvas.fillScreen(0x0000);  //初始化画布为黑色背景
   tft_left.drawRGBBitmap(0, 0, imageBuffer, canvas.width(), canvas.height());
   return micros() - start;
@@ -188,6 +168,7 @@ unsigned long photoText() {
 
 void remote_test() {
   int direction = 0;
+  int y=0;
   for (int i = 40; i <= 52; i += 2) {
     if (!digitalRead(i))  //被按下是低电平
     {
@@ -195,72 +176,17 @@ void remote_test() {
       if(i==52){Serial.println("RST");}
       if(i==50){Serial.println("SET");}
       if(i==48){Serial.println("MID");change_image();}
-      if(i==46){Serial.println("RIGHT");y=4;move_image(y);}
-      if(i==44){Serial.println("LEFT");y=3;move_image(y);}
-      if(i==42){Serial.println("DOWN");y=2;move_image(y);}
-      if(i==40){Serial.println("UP");y=1;move_image(y);}
+      if(i==46){Serial.println("RIGHT");y=4;move_image(y,DELTA);}
+      if(i==44){Serial.println("LEFT");y=3;move_image(y,DELTA);}
+      if(i==42){Serial.println("DOWN");y=2;move_image(y,DELTA);}
+      if(i==40){Serial.println("UP");y=1;move_image(y,DELTA);}
     while(!digitalRead(i)){;}
   }
   delay(5);
   }
     }
 
-  void change_image(){
-    image_x=0;
-    image_y=0;//清空图片位置
-    //tft_left.fillScreen(GC9A01A_BLACK);
-    //tft_right.fillScreen(GC9A01A_BLACK);
-    
-    currentImageIndex=(currentImageIndex + 1)%numImages;//更新索引
-    change_uint16(images[currentImageIndex]);
-    tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);  // 绘制图片
-    //tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);  // 绘制图片
-    }
-
-  void move_image(int y){
-    const int speed = 5; // 移动速度
-    switch(y){
-      case 0:break;
-      case 1:image_y-= speed;break;
-      case 2:image_y+= speed;break;
-      case 3:image_x-= speed;break;
-      case 4:image_x+= speed;break;
-      }
-    //tft_left.fillScreen(GC9A01A_BLACK);
-    tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-    //tft_right.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-    delay(5);
-      if (i == 52) { Serial.println("RST"); }
-      if (i == 50) { Serial.println("SET"); }
-      if (i == 48) {
-        Serial.println("MID");
-        change_image();
-      }
-      if (i == 46) {
-        Serial.println("RIGHT");
-        direction = 4;
-        move_image(direction, DELTA);
-      }
-      if (i == 44) {
-        Serial.println("LEFT");
-        direction = 3;
-        move_image(direction, DELTA);
-      }
-      if (i == 42) {
-        Serial.println("DOWN");
-        direction = 2;
-        move_image(direction, DELTA);
-      }
-      if (i == 40) {
-        Serial.println("UP");
-        direction = 1;
-        move_image(direction, DELTA);
-      }
-      while (!digitalRead(i)) { ; }
-    }
-    delay(20);
-  }
-}
+ 
 
 void change_image() {
   image_x = 0;
