@@ -6,21 +6,20 @@
 #include "SPI.h"
 #include "Adafruit_GFX.h"
 #include "Adafruit_GC9A01A.h"
-#include "image.h"
-//#include "Arduino_GigaDisplayTouch.h" //import touchscreen library
 #include <Wire.h>
 #include <Scheduler.h>
 #include <Servo.h>
-
+#include <cst816t.h>
 
 #define TOUCH 1
-#define TFT_CS 23  // Chip select
-#define TFT_DC 22  // Data/command
-#define TFT_BL 24  // Backlight control
-#define CTP_SDA 20
-#define CTP_SCL 21
-#define CTP_RST 27
-#define CTP_INT 28
+#define TFT_CS 23  // 23 Chip select
+#define TFT_DC 22  // 22 Data/command
+#define TFT_BL 24  //24  Backlight control
+#define TFT_RST 13
+#define CTP_SDA 9
+#define CTP_SCL 8
+#define CTP_RST RESET //RESET
+#define CTP_INT 25
 #define ODOR_SENSOR A8
 #define POT1 A0
 #define POT2 A1
@@ -32,11 +31,8 @@
 #define SET 50
 #define RST 52
 #define TFT1_CS 31  // Chip select
-#define TFT1_DC 33  // Data/command
+#define TFT1_DC 22  // Data/command
 //#define TFT1_RES 35
-
-
-
 #define DELTA 10 // Step to move images
 
 // Display constructor for primary hardware SPI connection -- the specific
@@ -44,13 +40,12 @@
 // negotiable. "Soft" SPI (using any pins) is an option but performance is
 // reduced; it's rarely used, see header file for syntax if needed.
 
-
 Adafruit_GC9A01A tft_left(TFT_CS, TFT_DC);
-Adafruit_GC9A01A tft_right(TFT1_CS, TFT1_DC);
-//Arduino_GigaDisplayTouch touchDetector;//initialize touchcreen
+Adafruit_GC9A01A tft_right(TFT1_CS, TFT_DC);
+//两个显示屏除了cs引脚不同以外，其他的引脚均保持一致（dc rst都一致）
+//触屏CTP_RST 与tft1/2_RST也可以接在一起 也可以不接一起--->接开发板的RESET
 
 Servo servo1, servo2;
-
 int odorVal = 0;
 int angle = 90;
 int count = 1;
@@ -87,6 +82,14 @@ int image_x = 0;
 int image_y = 0;
 int detection;// select detection 2/1
 
+//define touchpoints
+#define MAX_DOUBLE_TOUCH 5
+TwoWire myWire(CTP_SDA, CTP_SCL);
+cst816t touchpad(myWire, CTP_RST, CTP_INT);
+int touch_x,touch_y;
+int doubleclick_count=0;
+int double_touch_x[MAX_DOUBLE_TOUCH],double_touch_y[MAX_DOUBLE_TOUCH];
+
 void setup() {
   Serial.begin(115200);
   Serial.println("GC9A01A Test!");
@@ -94,18 +97,22 @@ void setup() {
   //open the screen
   tft_left.begin();
   tft_right.begin();
-  
+  tft_left.setRotation(0);
+  tft_right.setRotation(0);
+
+  pinMode(TFT_RST,OUTPUT);
+  digitalWrite(TFT_RST,LOW);
+  delay(10);
+  digitalWrite(TFT_RST,HIGH);
+
+  // open the touchpad
+  touchpad.begin(mode_motion);
+  Serial.println(touchpad.version());
+
 #if defined(TFT_BL)
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);  // Backlight on
 #endif                         // end TFT_BL
-
-//  //set CS CS1
-//  pinMode(TFT_CS,OUTPUT);
-//  pinMode(TFT1_CS,OUTPUT);
-//  digitalWrite(TFT_CS, HIGH);
-//  digitalWrite(TFT1_CS, HIGH);
-//  SPI.begin();
 
   //设定五向按键所接串口为输出、上拉电阻模式
   for(int i=40;i<=52;i+=2){pinMode(i,INPUT_PULLUP);}   
@@ -117,36 +124,29 @@ void setup() {
 }
 
 void loop(void) {
-  tft_left.setRotation(0);
-  tft_right.setRotation(0);
-  
+  //tft_left.setRotation(0);
+  //tft_right.setRotation(0);
   //testText();
-  photoText();
-  //Serial.println(numImages);
-  //remote_test();
+  //photoText();
+  remote_test();
 }
 
 void loop2() {  
-//  #if defined(TOUCH)//处理触摸事件
-//        int touch_x ,touch_y;
-//        uint8_t contacts;//check touch events
-//        GDTpoint_t points[5];//save touchpoints(the maximum number of touchpoints is 5)
-//        contacts = touchDetector.getTouchPoints(points);//get touch events
-//        if(contacts > 0)
-//        {
-//          touch_x = points[0].x;//only record the first touchpoint
-//          touch_y = points[0].y;
-//        }
-//        image_x = touch_x - (IMAGE_WIDTH / 2);//calculate the center point
-//        image_y = touch_y - (IMAGE_HEIGHT / 2);
-////        Serial.print("Touch X: ");
-////        Serial.print(touch_x);
-////        Serial.print(" Touch Y: ");
-////        Serial.println(touch_y);
-//        tft_left.fillScreen(GC9A01A_BLACK);
-//        tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-//        delay(100);
-//  #endif
+ #if defined(TOUCH)//处理触摸事件
+    if(touchpad.available())  
+    {
+      touch_x = touchpad.x;
+      touch_y = touchpad.y;
+      Serial.println(touchpad.state());
+      Serial.println("the touch point is:");
+      Serial.println(touch_x);
+      Serial.println(touch_y);
+       
+      if(touchpad.gesture_id==GESTURE_DOUBLE_CLICK){
+        doubleclick_gesture();
+      }
+    }
+ #endif
 }
 
 //修改图片数组
@@ -166,7 +166,6 @@ unsigned long photoText() {
   change_uint16(gImage_eyes1);
   //demo8.fillScreen(0x0000);//初始化画布为黑色背景
   canvas.fillScreen(0x0000);  //初始化画布为黑色背景
-  
   tft_left.drawRGBBitmap(0, 0, imageBuffer, canvas.width(), canvas.height());
   tft_right.drawRGBBitmap(0, 0, imageBuffer, canvas.width(), canvas.height());
   return micros() - start;
@@ -216,23 +215,22 @@ void move_image(int direction, const int delta) {
   delay(100);
 }
 
-void spi_display(int detection){
-    if(detection==1){
-        digitalWrite(TFT_CS,LOW);
-        digitalWrite(TFT1_CS,HIGH);
-        delay(10);
-        //tft_left.fillScreen(GC9A01A_BLACK);
-        //tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT); 
-        digitalWrite(TFT_CS,HIGH);
-        digitalWrite(TFT1_CS,HIGH);
-      }
-    else if(detection==2){
-        digitalWrite(TFT1_CS,LOW);
-        digitalWrite(TFT_CS,HIGH);
-        delay(10);
-        //tft_right.fillScreen(GC9A01A_BLACK);
-        //tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT); 
-        digitalWrite(TFT1_CS,HIGH);
-        digitalWrite(TFT_CS,HIGH);
-      }
-  }
+void doubleclick_gesture(){
+  if(doubleclick_count < MAX_DOUBLE_TOUCH)
+        {
+          double_touch_x[doubleclick_count] = touch_x;
+          double_touch_y[doubleclick_count] = touch_y;
+          doubleclick_count++;
+        }
+        else{
+          doubleclick_count=0;
+          memset(double_touch_x,0,sizeof(double_touch_x));
+          memset(double_touch_y,0,sizeof(double_touch_y));
+        }
+        if(doubleclick_count==1){
+          image_x = double_touch_x[0] - (IMAGE_WIDTH / 2);
+          image_y = double_touch_y[0] - (IMAGE_HEIGHT /2);
+          //tft_left.fillScreen(GC9A01A_BLACK);
+          tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+        }
+}
