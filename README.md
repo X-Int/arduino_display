@@ -3,7 +3,7 @@
 Arduino driver of two round displays to show eye emojis.
 
 * Aspect ratio of images `1：1`
-* Use the tool `Image2Lcd` to convert images into C arrays
+* Use the tool `Image2Lcd` to convert images into C arrays, choose `16-bit TrueColor` and untick `include header data`
 * Pin connection:
 ```C
  TFT_CS 23  // Chip select
