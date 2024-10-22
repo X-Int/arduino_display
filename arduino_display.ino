@@ -1,3 +1,4 @@
+#include <ElementStorage.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_GrayOLED.h>
 #include <Adafruit_SPITFT.h>
@@ -8,8 +9,9 @@
 #include "Adafruit_GC9A01A.h"
 #include <Wire.h>
 #include <Scheduler.h>
-#include <Servo.h>
+//#include <Servo.h>
 #include <cst816t.h>
+
 
 #define TOUCH 1
 #define TFT_CS 23  // 23 Chip select
@@ -18,7 +20,7 @@
 #define TFT_RST 13
 #define CTP_SDA 9
 #define CTP_SCL 8
-#define CTP_RST RESET //RESET
+#define CTP_RST RESET  //RESET
 #define CTP_INT 25
 #define ODOR_SENSOR A8
 #define POT1 A0
@@ -33,7 +35,7 @@
 #define TFT1_CS 31  // Chip select
 #define TFT1_DC 22  // Data/command
 //#define TFT1_RES 35
-#define DELTA 10 // Step to move images
+#define DELTA 10  // Step to move images
 
 // Display constructor for primary hardware SPI connection -- the specific
 // pins used for writing to the display are unique to each board and are not
@@ -45,7 +47,6 @@ Adafruit_GC9A01A tft_right(TFT1_CS, TFT_DC);
 //两个显示屏除了cs引脚不同以外，其他的引脚均保持一致（dc rst都一致）
 //触屏CTP_RST 与tft1/2_RST也可以接在一起 也可以不接一起--->接开发板的RESET
 
-Servo servo1, servo2;
 int odorVal = 0;
 int angle = 90;
 int count = 1;
@@ -57,17 +58,21 @@ extern const unsigned char gImage_eyes2[];
 extern const unsigned char gImage_eyes3[];
 extern const unsigned char gImage_eyes4[];
 extern const unsigned char gImage_eyes5[];
+extern unsigned char gImage_image1[];
+extern unsigned char gImage_image2[];
 //extern const unsigned char gImage_blue[];
 //extern const unsigned char gImage_green[];
 //extern const unsigned char gImage_eye3[];
 //定义图片指针
-const unsigned char* images[]={
-    gImage_eyes1,
-    gImage_eyes2,
-    gImage_eyes3,
-    gImage_eyes4,
-    gImage_eyes5,
-  }; 
+const unsigned char* images[] = {
+  gImage_eyes1,
+  gImage_eyes2,
+  gImage_eyes3,
+  gImage_eyes4,
+  gImage_eyes5,
+  gImage_image1,
+  gImage_image2,
+};
 const int numImages = sizeof(images) / sizeof(images[0]);
 int currentImageIndex = 0;
 
@@ -76,19 +81,95 @@ int currentImageIndex = 0;
 #define IMAGE_HEIGHT 240
 GFXcanvas16 canvas(240, 240);
 uint16_t imageBuffer[IMAGE_WIDTH * IMAGE_HEIGHT];
+uint16_t moveBuffer[IMAGE_WIDTH * IMAGE_HEIGHT];
 
 //定义图片的初始坐标位置
 int image_x = 0;
 int image_y = 0;
-int detection;// select detection 2/1
+int detection;
 
 //define touchpoints
 #define MAX_DOUBLE_TOUCH 5
 TwoWire myWire(CTP_SDA, CTP_SCL);
+//TwoWire myWire2(CTP_SDA, CTP_SCL);
 cst816t touchpad(myWire, CTP_RST, CTP_INT);
-int touch_x,touch_y;
-int doubleclick_count=0;
-int double_touch_x[MAX_DOUBLE_TOUCH],double_touch_y[MAX_DOUBLE_TOUCH];
+//cst816t touchpad2(myWIre2,CTP_RST2,CTP_INT2);
+int touch_x, touch_y;
+int doubleclick_count = 0;
+int double_touch_x[MAX_DOUBLE_TOUCH], double_touch_y[MAX_DOUBLE_TOUCH];
+
+//define function
+// void image_combination(unsigned char image1[], unsigned char image2[], int change_numrows, float rotate_angel = 5, float alpha = 0.5);  //函数的定义和申请只能有一个提供默认参数
+uint16_t* change_uint16(const unsigned char image[]);
+unsigned long photoText();
+void remote_test();
+void move_image();
+void change_image();
+void doubleclick_gesture();
+
+void image_combination(unsigned char image1[], unsigned char image2[], int change_numrows, float rotate_angel = 5, float alpha = 0.5) {
+  int totalpixels = IMAGE_WIDTH * IMAGE_HEIGHT;  //calculate total pixe
+  int numpixels = IMAGE_WIDTH * change_numrows;  //calculate move numpils
+  uint16_t* image3 = new uint16_t[totalpixels];
+  uint16_t* image4 = new uint16_t[totalpixels];
+  uint16_t* rotate_image = new uint16_t[totalpixels];  // 存储旋转后的数组
+  float rad = rotate_angel * (M_PI / 180.0);           // 角度转变为弧度制
+  uint16_t lowByte, highByte;
+  int center_x = IMAGE_WIDTH / 2;
+  int center_y = IMAGE_HEIGHT / 2;
+
+  for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT; i++) {
+    lowByte = image1[i * 2];
+    highByte = image1[i * 2 + 1];
+    image3[i] = (highByte << 8) | lowByte;  // 组合两个字节为一个 16 位的值
+  }
+  for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT; i++) {
+    lowByte = image2[i * 2];
+    highByte = image2[i * 2 + 1];
+    image4[i] = (highByte << 8) | lowByte;  // 组合两个字节为一个 16 位的值
+  }
+  //rotate image2
+  for (int i = 0; i < totalpixels; i++) {
+    rotate_image[i] = 0;
+  }
+  for (int y = 0; y < IMAGE_HEIGHT; y++) {
+    for (int x = 0; x < IMAGE_WIDTH; x++) {
+      int newX = cos(rad) * (x - center_x) - sin(rad) * (y - center_y) + center_x;
+      int newY = sin(rad) * (x - center_x) + cos(rad) * (y - center_y) + center_y;
+      // 检查新坐标是否在图像范围内
+      if (newX >= 0 && newX < IMAGE_WIDTH && newY >= 0 && newY < IMAGE_HEIGHT) {
+        rotate_image[newY * IMAGE_WIDTH + newX] = image4[y * IMAGE_WIDTH + x];  // 将旋转后的像素映射到新位置
+      }
+    }
+  }
+  //move imagexels
+  for (int i = totalpixels - 1; i >= numpixels; i--) {
+    image4[i] = rotate_image[i - numpixels];
+  }
+  for (int i = 0; i <= numpixels - 1; i++) {
+    image4[i] = 0xFFFF;  //white
+  }
+  //rotate image3
+  // conbination image1 and image2
+  for (int i = 0; i <= totalpixels - 1; i++) {
+    uint8_t r1 = (image3[i] >> 11) & 0x1F;
+    uint8_t g1 = (image3[i] >> 5) & 0x3F;
+    uint8_t b1 = image3[i] & 0x1F;
+    uint8_t r2 = (image4[i] >> 11) & 0x1F;
+    uint8_t g2 = (image4[i] >> 5) & 0x3F;
+    uint8_t b2 = image4[i] & 0x1F;
+    uint8_t r = (uint8_t)((r1 * (1 - alpha)) + (r2 * alpha));
+    uint8_t g = (uint8_t)((g1 * (1 - alpha)) + (g2 * alpha));
+    uint8_t b = (uint8_t)((b1 * (1 - alpha)) + (b2 * alpha));
+    moveBuffer[i] = (r << 11) | (g << 5) | b;
+    Serial.print(moveBuffer[i], HEX);
+    Serial.print(" ");
+  }
+  Serial.println();
+  // tft_left.drawRGBBitmap(0, 0, moveBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);  // 绘制图片
+  // tft_right.drawRGBBitmap(0, 0, moveBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+}
+
 
 void setup() {
   Serial.begin(115200);
@@ -100,10 +181,10 @@ void setup() {
   tft_left.setRotation(0);
   tft_right.setRotation(0);
 
-  pinMode(TFT_RST,OUTPUT);
-  digitalWrite(TFT_RST,LOW);
+  pinMode(TFT_RST, OUTPUT);
+  digitalWrite(TFT_RST, LOW);
   delay(10);
-  digitalWrite(TFT_RST,HIGH);
+  digitalWrite(TFT_RST, HIGH);
 
   // open the touchpad
   touchpad.begin(mode_motion);
@@ -115,12 +196,11 @@ void setup() {
 #endif                         // end TFT_BL
 
   //设定五向按键所接串口为输出、上拉电阻模式
-  for(int i=40;i<=52;i+=2){pinMode(i,INPUT_PULLUP);}   
-  servo1.attach(2);
-  servo2.attach(3);
+  for (int i = 40; i <= 52; i += 2) { pinMode(i, INPUT_PULLUP); }
 
-  photoText();
+  //photoText();
   Scheduler.startLoop(loop2);
+  // image_combination(gImage_image1,gImage_image2,5);
 }
 
 void loop(void) {
@@ -128,25 +208,25 @@ void loop(void) {
   //tft_right.setRotation(0);
   //testText();
   //photoText();
-  remote_test();
+  //remote_test();
+  // image_combination(gImage_image1, gImage_image2, 5);
 }
 
-void loop2() {  
- #if defined(TOUCH)//处理触摸事件
-    if(touchpad.available())  
-    {
-      touch_x = touchpad.x;
-      touch_y = touchpad.y;
-      Serial.println(touchpad.state());
-      Serial.println("the touch point is:");
-      Serial.println(touch_x);
-      Serial.println(touch_y);
-       
-      if(touchpad.gesture_id==GESTURE_DOUBLE_CLICK){
-        doubleclick_gesture();
-      }
+void loop2() {
+#if defined(TOUCH)  //处理触摸事件
+  if (touchpad.available()) {
+    touch_x = touchpad.x;
+    touch_y = touchpad.y;
+    Serial.println(touchpad.state());
+    Serial.println("the touch point is:");
+    Serial.println(touch_x);
+    Serial.println(touch_y);
+
+    if (touchpad.gesture_id == GESTURE_DOUBLE_CLICK) {
+      doubleclick_gesture();
     }
- #endif
+  }
+#endif
 }
 
 //修改图片数组
@@ -163,7 +243,7 @@ unsigned long photoText() {
   //tft_left.fillScreen(GC9A01A_BLACK);
   //tft_right.fillScreen(GC9A01A_BLACK);
   unsigned long start = micros();
-  change_uint16(gImage_eyes1);
+  change_uint16(gImage_image1);
   //demo8.fillScreen(0x0000);//初始化画布为黑色背景
   canvas.fillScreen(0x0000);  //初始化画布为黑色背景
   tft_left.drawRGBBitmap(0, 0, imageBuffer, canvas.width(), canvas.height());
@@ -173,23 +253,42 @@ unsigned long photoText() {
 
 void remote_test() {
   int direction = 0;
-  int y=0;
+  int y = 0;
   for (int i = 40; i <= 52; i += 2) {
     if (!digitalRead(i))  //被按下是低电平
     {
       //delay(50);//防抖动
-      if(i==52){Serial.println("RST");}
-      if(i==50){Serial.println("SET");}
-      if(i==48){Serial.println("MID");change_image();}
-      if(i==46){Serial.println("RIGHT");y=4;move_image(y,DELTA);}
-      if(i==44){Serial.println("LEFT");y=3;move_image(y,DELTA);}
-      if(i==42){Serial.println("DOWN");y=2;move_image(y,DELTA);}
-      if(i==40){Serial.println("UP");y=1;move_image(y,DELTA);}
-    while(!digitalRead(i)){;}
-  }
-  delay(5);
-  }
+      if (i == 52) { Serial.println("RST"); }
+      if (i == 50) { Serial.println("SET"); }
+      if (i == 48) {
+        Serial.println("MID");
+        change_image();
+      }
+      if (i == 46) {
+        Serial.println("RIGHT");
+        y = 4;
+        move_image(y, DELTA);
+      }
+      if (i == 44) {
+        Serial.println("LEFT");
+        y = 3;
+        move_image(y, DELTA);
+      }
+      if (i == 42) {
+        Serial.println("DOWN");
+        y = 2;
+        move_image(y, DELTA);
+      }
+      if (i == 40) {
+        Serial.println("UP");
+        y = 1;
+        move_image(y, DELTA);
+      }
+      while (!digitalRead(i)) { ; }
     }
+    delay(5);
+  }
+}
 
 void change_image() {
   image_x = 0;
@@ -198,7 +297,7 @@ void change_image() {
   currentImageIndex = (currentImageIndex + 1) % numImages;  //更新索引
   change_uint16(images[currentImageIndex]);
   tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);  // 绘制图片
-  //tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT); 
+  tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
 
 void move_image(int direction, const int delta) {
@@ -211,26 +310,26 @@ void move_image(int direction, const int delta) {
   }
   tft_left.fillScreen(GC9A01A_BLACK);
   tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-  //tft_right.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
   delay(100);
+  tft_right.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
 
-void doubleclick_gesture(){
-  if(doubleclick_count < MAX_DOUBLE_TOUCH)
-        {
-          double_touch_x[doubleclick_count] = touch_x;
-          double_touch_y[doubleclick_count] = touch_y;
-          doubleclick_count++;
-        }
-        else{
-          doubleclick_count=0;
-          memset(double_touch_x,0,sizeof(double_touch_x));
-          memset(double_touch_y,0,sizeof(double_touch_y));
-        }
-        if(doubleclick_count==1){
-          image_x = double_touch_x[0] - (IMAGE_WIDTH / 2);
-          image_y = double_touch_y[0] - (IMAGE_HEIGHT /2);
-          //tft_left.fillScreen(GC9A01A_BLACK);
-          tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-        }
+
+
+void doubleclick_gesture() {
+  if (doubleclick_count < MAX_DOUBLE_TOUCH) {
+    double_touch_x[doubleclick_count] = touch_x;
+    double_touch_y[doubleclick_count] = touch_y;
+    doubleclick_count++;
+  } else {
+    doubleclick_count = 0;
+    memset(double_touch_x, 0, sizeof(double_touch_x));
+    memset(double_touch_y, 0, sizeof(double_touch_y));
+  }
+  if (doubleclick_count == 1) {
+    image_x = double_touch_x[0] - (IMAGE_WIDTH / 2);
+    image_y = double_touch_y[0] - (IMAGE_HEIGHT / 2);
+    //tft_left.fillScreen(GC9A01A_BLACK);
+    tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  }
 }
