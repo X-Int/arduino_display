@@ -10,6 +10,7 @@
 #include <Scheduler.h>
 //#include <Servo.h>
 #include <cst816t.h>
+#include <math.h>
 
 #define TOUCH 1
 #define TFT_CS 23  // 23 Chip select
@@ -60,7 +61,6 @@ int potVal1, potVal2;  // variable to read the value from the analog pin
 //extern const unsigned char gImage_blue[];
 //extern const unsigned char gImage_green[];
 //extern const unsigned char gImage_eye3[];
-
 extern const unsigned char gImage_neweye[];
 extern const unsigned char gImage_tears[];
 //定义图片指针
@@ -125,7 +125,7 @@ void setup() {
   //servo1.attach(2);
   //servo2.attach(3);
 
-  photoText();
+  //photoText();
   Scheduler.startLoop(loop2);
 }
 
@@ -134,7 +134,8 @@ void loop(void) {
   //tft_right.setRotation(0);
   //testText();
   //photoText();
-  remote_test();
+  //remote_test();
+  image_resize(gImage_neweye,0.9);
 }
 
 void loop2() {  
@@ -241,7 +242,7 @@ void doubleclick_gesture(){
         }
 }
 
-void image_conbination(unsigned char image1[], unsigned char image2[], int change_numrows, float rotate_angle, float alpha) {
+void image_combination(unsigned char image1[], unsigned char image2[], int change_numrows, float rotate_angle, float alpha) {
     int totalpixels = IMAGE_WIDTH * IMAGE_HEIGHT; // 总像素数
     int numpixels = IMAGE_WIDTH * change_numrows; // 移动的像素数
     uint16_t* image3 = new uint16_t[totalpixels];
@@ -299,10 +300,57 @@ void image_conbination(unsigned char image1[], unsigned char image2[], int chang
         uint8_t r = (uint8_t)((r1 * (1 - alpha)) + (r2 * alpha));
         uint8_t g = (uint8_t)((g1 * (1 - alpha)) + (g2 * alpha));
         uint8_t b = (uint8_t)((b1 * (1 - alpha)) + (b2 * alpha));
-
         moveBuffer[i] = (r << 11) | (g << 5) | b;
+    }
+    //串口显示
+    Serial.print("moveBuffer:\n");
+    for(int i = 0; i < IMAGE_HEIGHT;i++){
+      for(int j = 0;j < IMAGE_WIDTH;j++)
+      {
+        Serial.print(moveBuffer[j],HEX);
+        Serial.print(' ');
+      }
+      Serial.println();
     }
     // 绘制图像
     tft_left.drawRGBBitmap(0, 0, moveBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
     tft_right.drawRGBBitmap(0, 0, moveBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+}
+
+void image_display(int x, int y,uint16_t image[],int height,int width){
+  tft_left.drawRGBBitmap(x, y, image, height, width);
+  tft_right.drawRGBBitmap(x, y, image, height, width);
+}
+
+void image_resize(const unsigned char origin_image[],float beta)
+{
+  int x=0,y=0;
+  int centre_x = IMAGE_WIDTH / 2;
+  int centre_y = IMAGE_HEIGHT / 2;
+  int totalpixels = IMAGE_HEIGHT * IMAGE_WIDTH;
+  uint16_t* resizeBuffer = new uint16_t[totalpixels];
+
+  for(int i=0;i<totalpixels;i++){
+    resizeBuffer[i]=0;
+  }
+  for(int i=0; i<IMAGE_HEIGHT * beta;i++){
+    for(int j=0; j<IMAGE_WIDTH * beta;j++)
+    {
+      // float distance,new_distance;
+      // distance = sqrt(pow(abs(x-centre_x),2)+pow(abs(y-centre_y),2));
+      // new_distance = distance * beta;
+      // new_x = round(x * beta);
+      // new_y = round(y * beta);//四舍五入取整计算新的坐标值
+      if(i<IMAGE_HEIGHT && j<IMAGE_WIDTH){
+        resizeBuffer[i * IMAGE_WIDTH +j] = origin_image[IMAGE_WIDTH*(int)(i/beta) + (int)(j/beta)];
+      }
+    }
+  }
+  for(int i=0;i < totalpixels;i++){
+    if(resizeBuffer[i]==0){resizeBuffer[i] = 0xFFFF;}
+  }
+  //image_display(0,0,resizeBuffer,240,240);
+  //*resizeBuffer传递数组第一个元素 resizeBuffer传递整个数组
+  Serial.print("放缩成功");
+  Serial.print(sizeof(resizeBuffer));
 }

@@ -26,3 +26,9 @@ Arduino driver of two round displays to show eye emojis.
  1. 显示眼神图片 photoText()
  2. 切换图片 change_image()
  3. 移动图片 move_image()
+
+
+*branch:
+1.main: 含有combination_image函数
+2.test_2:触屏＋显示功能
+3.new_looks
