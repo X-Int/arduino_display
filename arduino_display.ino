@@ -1,6 +1,3 @@
-#include <Adafruit_SPITFT.h>
-#include <Adafruit_SPITFT_Macros.h>
-#include <gfxfont.h>
 #include "SPI.h"
 #include "Adafruit_GFX.h"
 #include "Adafruit_GC9A01A.h"
@@ -8,8 +5,7 @@
 #include <Scheduler.h>
 #include <cst816t.h>
 
-
-#define TOUCH 1
+#define TOUCH 0
 #define TFT_CS 23  // 23 Chip select
 #define TFT_DC 22  // 22 Data/command
 #define TFT_BL 24  //24  Backlight control
@@ -20,12 +16,6 @@
 #define CTP_INT 25
 #define TFT1_CS 31  // Chip select
 #define TFT1_DC 22  // Data/command
-#define DELTA 10    // Step to move images
-
-// Display constructor for primary hardware SPI connection -- the specific
-// pins used for writing to the display are unique to each board and are not
-// negotiable. "Soft" SPI (using any pins) is an option but performance is
-// reduced; it's rarely used, see header file for syntax if needed.
 
 Adafruit_GC9A01A tft_left(TFT_CS, TFT_DC);
 Adafruit_GC9A01A tft_right(TFT1_CS, TFT_DC);
@@ -45,10 +35,8 @@ const unsigned char* images[] = {
 #define IMAGE_HEIGHT 240
 #define IMAGE_WIDTH 240
 #define IMAGE_SIZE IMAGE_HEIGHT* IMAGE_WIDTH
-GFXcanvas16 canvas(240, 240);
-uint16_t imageBuffer[IMAGE_SIZE];
-uint16_t pupil[IMAGE_SIZE];
-uint16_t tear[IMAGE_SIZE];
+
+uint16_t imageBuffer[IMAGE_SIZE], pupil[IMAGE_SIZE], tear[IMAGE_SIZE];
 
 //定义图片的初始坐标位置
 int image_x = 0;
@@ -62,26 +50,43 @@ TwoWire myWire(CTP_SDA, CTP_SCL);
 cst816t touchpad(myWire, CTP_RST, CTP_INT);
 //cst816t touchpad2(myWIre2,CTP_RST2,CTP_INT2);
 int touch_x, touch_y;
+uint16_t lowByte, highByte;
 int doubleclick_count = 0;
 int double_touch_x[MAX_DOUBLE_TOUCH], double_touch_y[MAX_DOUBLE_TOUCH];
 
 //define function
-void move_image();
-void doubleclick_gesture();
+void doubleclick_gesture() {
+  if (doubleclick_count < MAX_DOUBLE_TOUCH) {
+    double_touch_x[doubleclick_count] = touch_x;
+    double_touch_y[doubleclick_count] = touch_y;
+    doubleclick_count++;
+  } else {
+    doubleclick_count = 0;
+    memset(double_touch_x, 0, sizeof(double_touch_x));
+    memset(double_touch_y, 0, sizeof(double_touch_y));
+  }
+  if (doubleclick_count == 1) {
+    image_x = double_touch_x[0] - (IMAGE_WIDTH / 2);
+    image_y = double_touch_y[0] - (IMAGE_HEIGHT / 2);
+    //tft_left.fillScreen(GC9A01A_BLACK);
+    tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  }
+}
 
 //修改图片数组
-void gImage2image(const unsigned char gImage[], uint16_t image[]) {
+void gImage2image(const unsigned char gImage[], uint16_t* image) {
   for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT; i++) {
-    uint16_t lowByte = gImage[i * 2];
-    uint16_t highByte = gImage[i * 2 + 1];
+    lowByte = gImage[i * 2];
+    highByte = gImage[i * 2 + 1];
     image[i] = (highByte << 8) | lowByte;  // 组合两个字节为一个 16 位的值
   }
 }
 
 void rotCombine2Images(const uint16_t img1[], const uint16_t img2[], float angle) {
-  
-  tft_left.drawRGBBitmap(0, 0, pupil, IMAGE_WIDTH, IMAGE_HEIGHT);  // 绘制图片
   tft_right.drawRGBBitmap(0, 0, tear, IMAGE_WIDTH, IMAGE_HEIGHT);
+  tft_left.drawRGBBitmap(0, 0, pupil, IMAGE_WIDTH, IMAGE_HEIGHT);
+  // gImage2image(gImage_tear, imageBuffer);
+  // tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
 
 
@@ -98,7 +103,7 @@ void setup() {
 #if defined(TFT_BL)
   pinMode(TFT_BL, OUTPUT);
   digitalWrite(TFT_BL, HIGH);  // Backlight on
-#endif    
+#endif
 
   pinMode(TFT_RST, OUTPUT);
   digitalWrite(TFT_RST, LOW);
@@ -109,8 +114,8 @@ void setup() {
   touchpad.begin(mode_motion);
   Serial.println(touchpad.version());
 
-  gImage2image(gImage_pupil, pupil);
   gImage2image(gImage_tear, tear);
+  gImage2image(gImage_pupil, pupil);
 
   Scheduler.startLoop(loop2);
 }
@@ -136,22 +141,4 @@ void loop2() {
     }
   }
 #endif
-}
-
-void doubleclick_gesture() {
-  if (doubleclick_count < MAX_DOUBLE_TOUCH) {
-    double_touch_x[doubleclick_count] = touch_x;
-    double_touch_y[doubleclick_count] = touch_y;
-    doubleclick_count++;
-  } else {
-    doubleclick_count = 0;
-    memset(double_touch_x, 0, sizeof(double_touch_x));
-    memset(double_touch_y, 0, sizeof(double_touch_y));
-  }
-  if (doubleclick_count == 1) {
-    image_x = double_touch_x[0] - (IMAGE_WIDTH / 2);
-    image_y = double_touch_y[0] - (IMAGE_HEIGHT / 2);
-    //tft_left.fillScreen(GC9A01A_BLACK);
-    tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-  }
 }
