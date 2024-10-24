@@ -5,6 +5,7 @@
 #include <Scheduler.h>
 #include <cst816t.h>
 
+
 #define TOUCH 0
 #define TFT_CS 23  // 23 Chip select
 #define TFT_DC 22  // 22 Data/command
@@ -35,8 +36,8 @@ const unsigned char* images[] = {
 #define IMAGE_HEIGHT 240
 #define IMAGE_WIDTH 240
 #define IMAGE_SIZE IMAGE_HEIGHT* IMAGE_WIDTH
-
 uint16_t imageBuffer[IMAGE_SIZE], pupil[IMAGE_SIZE], tear[IMAGE_SIZE];
+unsigned char Moveimage[IMAGE_SIZE *2];
 
 //定义图片的初始坐标位置
 int image_x = 0;
@@ -82,13 +83,56 @@ void gImage2image(const unsigned char gImage[], uint16_t* image) {
   }
 }
 
-void rotCombine2Images(const uint16_t img1[], const uint16_t img2[], float angle) {
-  tft_right.drawRGBBitmap(0, 0, tear, IMAGE_WIDTH, IMAGE_HEIGHT);
+void Move1Image(const uint16_t img[],int changeNumrows){
+  int total_pixels = IMAGE_SIZE;
+  int num_pixels = IMAGE_WIDTH * changeNumrows;
+   // 确保 num_pixels 不超过总像素数
+  if (num_pixels > total_pixels) {
+    num_pixels = total_pixels;
+  }
+  //方法一：
+  //memmove(&Moveimage[num_pixels], &img2[0], (total_pixels - num_pixels) * sizeof(uint16_t));
+  //memset(Moveimage, 0xFFFF, total_pixels * sizeof(uint16_t));
+  //方法二：
+  for(int i = num_pixels;i < total_pixels-num_pixels ;i++){
+    Moveimage[i] = img[i - num_pixels];
+  }
+  for(i = 0;i < num_pixels;i++){
+    Move1Image[i] = 65535;//white
+  }
+
+  Serial.print("Moveimage:");
+  for(int i = 0; i < IMAGE_HEIGHT ; i++){
+    for(int j = 0; j < IMAGE_WIDTH; j++){
+      Serial.print(Moveimage[i * changeNumrows + j]);
+      Serial.print(' ');
+    }
+    Serial.println();
+  }
+  tft_right.drawRGBBitmap(0, 0,tear, IMAGE_WIDTH, IMAGE_HEIGHT);
   tft_left.drawRGBBitmap(0, 0, pupil, IMAGE_WIDTH, IMAGE_HEIGHT);
-  // gImage2image(gImage_tear, imageBuffer);
-  // tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
 
+void rotCombine2Images(const uint16_t img1[], const uint16_t img2[], float angle) {
+  //int change_num = 5;//img2向下移动行数
+  int centre_x = IMAGE_WIDTH / 2;
+  int centre_y = IMAGE_HEIGHT /2;
+  int total_pixels = IMAGE_SIZE;
+  int changeNumrows = 5;
+  int num_pixels = IMAGE_WIDTH * changeNumrows;
+   // 确保 num_pixels 不超过总像素数
+  if (num_pixels > total_pixels) {
+    num_pixels = total_pixels;
+  }
+
+  // for(int i=0;i<total_pixels;i++){
+  //   Moveimage[i] = 0xFFFF;
+  // }
+  // Moveimage[0] = 0XFFFF;
+  // Serial.println(Moveimage[0]);
+  tft_right.drawRGBBitmap(0, 0, tear, IMAGE_WIDTH, IMAGE_HEIGHT);
+  tft_left.drawRGBBitmap(0, 0, pupil, IMAGE_WIDTH, IMAGE_HEIGHT);
+}
 
 void setup() {
   Serial.begin(115200);
@@ -118,12 +162,17 @@ void setup() {
   gImage2image(gImage_pupil, pupil);
 
   Scheduler.startLoop(loop2);
+
+  //test MoveImage
+  //rotCombine2Images(pupil, tear, 5);
+  Move1Image(tear,5);
 }
 
 void loop(void) {
   tft_left.setRotation(0);
   tft_right.setRotation(0);
   rotCombine2Images(pupil, tear, 5);
+  Move1Image(tear,5);
 }
 
 void loop2() {
@@ -131,10 +180,10 @@ void loop2() {
   if (touchpad.available()) {
     touch_x = touchpad.x;
     touch_y = touchpad.y;
-    Serial.println(touchpad.state());
-    Serial.println("the touch point is:");
-    Serial.println(touch_x);
-    Serial.println(touch_y);
+    // Serial.println(touchpad.state());
+    // Serial.println("the touch point is:");
+    // Serial.println(touch_x);
+    // Serial.println(touch_y);
 
     if (touchpad.gesture_id == GESTURE_DOUBLE_CLICK) {
       doubleclick_gesture();
