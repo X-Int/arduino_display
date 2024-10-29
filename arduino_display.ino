@@ -6,6 +6,7 @@
 #include <cst816t.h>
 
 #define TOUCH 0
+#define FILLCOLOR 1
 #define TFT_CS 23  // 23 Chip select
 #define TFT_DC 22  // 22 Data/command
 #define TFT_BL 24  //24  Backlight control
@@ -24,7 +25,7 @@ Adafruit_GC9A01A tft_right(TFT1_CS, TFT_DC);
 
 //定义图片
 extern const unsigned char gImage_pupil[];
-extern const unsigned char gImage_tear[];
+extern const unsigned char gImage_tear[];//879F FFFF
 //定义图片指针
 const unsigned char* images[] = {
   gImage_pupil,
@@ -36,11 +37,19 @@ const unsigned char* images[] = {
 #define IMAGE_WIDTH 240
 #define IMAGE_SIZE IMAGE_HEIGHT* IMAGE_WIDTH
 uint16_t imageBuffer[IMAGE_SIZE], pupil[IMAGE_SIZE], tear[IMAGE_SIZE];
+int positions[240][2];
+uint16_t fillcolour[] = {
+  0XFFFF,//白色
+  0XF800,//红色
+  0X07E0,//绿色
+  0X001F,//蓝色
+  0XFFE0,//黄色
+  0X0000,//黑色
+};
 
 //定义图片的初始坐标位置
 int image_x = 0;
 int image_y = 0;
-int detection;
 
 //define touchpoints
 #define MAX_DOUBLE_TOUCH 5
@@ -70,6 +79,17 @@ void doubleclick_gesture() {
     tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
   }
 }
+void Serprint(uint16_t img[]){
+  Serial.println("IMG:");
+  for(int i=0;i<IMAGE_HEIGHT;i++){
+    for(int j=0; j<IMAGE_WIDTH;j++){
+      Serial.print(img[i*IMAGE_WIDTH+j],HEX);
+      Serial.print(' ');
+    }
+    Serial.println();
+  }
+  Serial.println();
+}
 
 //修改图片数组
 void gImage2image(const unsigned char gImage[], uint16_t* image) {
@@ -80,7 +100,30 @@ void gImage2image(const unsigned char gImage[], uint16_t* image) {
   }
 }
 
+void boundaryfill(uint16_t img[]){
+  // //给图像外框填充rows数量的白色
+  // int rows = 3;
+  // for(int i = 0; i < rows; i++){
+  //   for(int j = 0; j < IMAGE_WIDTH; j++){
+  //     img[i * IMAGE_WIDTH + j] = 0XFFFF;
+  //     img[IMAGE_WIDTH * (IMAGE_HEIGHT -1 -i) + j] = 0XFFFF;
+  //   }
+  // }
+  // for(int j = 0; j < rows; j++){
+  //   for(int i = 0;i <IMAGE_HEIGHT; i++){
+  //     img[i * IMAGE_WIDTH +j] = 0XFFFF;
+  //     img[(IMAGE_WIDTH-1-j) + i * IMAGE_WIDTH] = 0XFFFF;
+  //   }
+  // }
+  //预处理tear数组，将像素值填充为0XFFFF或者0X879F
+  for(int i = 0;i<IMAGE_SIZE;i++){
+    if((img[i] >= 0XB7FF)||(img[1] <= 0X4FFF)){img[i] = 0XFFFF;}
+    else{img[i] =0X879F; }
+  }
+}
+
 uint16_t BilinearInterpolation(uint16_t* img,float img_x, float img_y){
+  /*二次插值获得像素点RGB值*/
   int img_x1 = int(img_x);
   int img_x2 = img_x1 + 1;
   int img_y1 = int(img_y);
@@ -141,11 +184,15 @@ void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY)
     double img_x_f = img0_x;
     double img_y_f = img0_y;
     for (long x = 0; x < IMAGE_WIDTH; x++) {
-        int newX = int(img_x_f);//取整获得对应坐标值
+        int newX = int(img_x_f);//取整获得对应原图像中的坐标值
         int newY = int(img_y_f);
         if (newX >= 0 && newX < IMAGE_WIDTH && newY >= 0 && newY < IMAGE_HEIGHT) {
           imageBuffer[y * IMAGE_WIDTH + x] = BilinearInterpolation(img,img_x_f,img_y_f);//二次插值获得像素值
           //imageBuffer[y * IMAGE_WIDTH + x] = img[newY * IMAGE_WIDTH + newX]; // 将旋转后的像素映射到新位置
+        }
+        else if(FILLCOLOR){
+            //图片缩小周围会出现一圈黑色，使用fillcolour填充不同的颜色进去
+          imageBuffer[y * IMAGE_WIDTH + x] = fillcolour[0];//填充白色
         }
         img_x_f += Ax;
         img_y_f += Ay;
@@ -153,31 +200,69 @@ void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY)
     img0_x += Bx;
     img0_y += By;
   }
-  tft_right.drawRGBBitmap(0, 0,imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-  tft_left.drawRGBBitmap(0, 0,imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  //填补出现的0(由于缩小使得边界出现一串0)
+  for(int i=0;i<total_pixels;i++){
+    if(imageBuffer[i] == 0){
+      imageBuffer[i] = fillcolour[0];
+      }
+  }
+  // for(int i=0; i< total_pixels;i++){
+  //   img[i] = imageBuffer[i];//把旋转后的图像数组重新放回源数组中
+  // }
+  // boundaryfill(img);
+  //boundaryfill(imageBuffer);
 }
 
 void Move1Image(uint16_t img[],int changeNumrows){
+  /*将输入的图片向下移动changeNumrows行*/
   int total_pixels = IMAGE_SIZE;
-  int num_pixels = IMAGE_WIDTH * changeNumrows;
+  int num_pixels = IMAGE_WIDTH * abs(changeNumrows);
    // 确保 num_pixels 不超过总像素数
   if (num_pixels > total_pixels) {
     num_pixels = total_pixels;
   }
-  memmove(&img[num_pixels], &img[0], (total_pixels - num_pixels) * sizeof(uint16_t));
-  for(int i = 0;i < num_pixels;i++){
-    img[i] = 0XFFFF;//white
+  if(changeNumrows >0){
+    memmove(&imageBuffer[num_pixels], &img[0], (total_pixels - num_pixels) * sizeof(uint16_t));
+    for(int i = 0;i < num_pixels;i++){
+      imageBuffer[i] = 0XFFFF;//white
   }
-  // tft_right.drawRGBBitmap(0, 0,img, IMAGE_WIDTH, IMAGE_HEIGHT);
-  // tft_left.drawRGBBitmap(0, 0, img, IMAGE_WIDTH, IMAGE_HEIGHT);
+  }else if(changeNumrows < 0){
+    memmove(&imageBuffer[0], &img[num_pixels], (total_pixels - num_pixels) * sizeof(uint16_t));
+    // 填充下方空白部分为白色
+    for (int i = total_pixels - num_pixels; i < total_pixels; i++) {
+      imageBuffer[i] = 0xFFFF; // white
+    }
+  }
+  boundaryfill(imageBuffer);
 }
 
-void rotCombine2Images(uint16_t img1[], uint16_t img2[], float angle) {
-  Move1Image(img2,50);
+void rotCombine2Images(uint16_t img1[], uint16_t img2[]) {
+  /*图像融合*/
+  for(int i=0; i < IMAGE_SIZE;i++){
+    if(img2[i]== 0XFFFF || img2[i]== 0XFFDF ||img2[i]== 0XFF7F){
+      imageBuffer[i] = img1[i];
+    }
+    else{
+      imageBuffer[i] = img2[i];
+    }
+  }
+  tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+}
 
-
-  tft_right.drawRGBBitmap(0, 0, tear, IMAGE_WIDTH, IMAGE_HEIGHT);
-  tft_left.drawRGBBitmap(0, 0, pupil, IMAGE_WIDTH, IMAGE_HEIGHT);
+void Display2Image(uint16_t img1[],uint16_t img2[]){
+  int move_rows = 100;
+  Rotate1Image(img2,0,0.8,0.8);//缩小后的结果放在imagebufffer中
+  for(int i = 0;i < IMAGE_SIZE;i++){
+    img2[i] = imageBuffer[i];
+      //转移到image2上，每次旋转以img2作为旋转源图转不同的角度会比在imagebuffer上累加旋转图像清晰
+  }
+  for(int i=10;i<=100;i+=10){
+    Rotate1Image(img2,i,1,1);//旋转 结果放入imagebuffer
+    Move1Image(imageBuffer,move_rows);//向下移动100行放入imagebuffer
+    rotCombine2Images(img1,imageBuffer);//叠加
+    delay(1000);//推迟1s
+  }
 }
 
 void setup() {
@@ -206,23 +291,18 @@ void setup() {
 
   gImage2image(gImage_tear, tear);
   gImage2image(gImage_pupil, pupil);
-
+  boundaryfill(tear);//修改为只有两种颜色
+  
   Scheduler.startLoop(loop2);
 
-  //test MoveImage
-  //rotCombine2Images(pupil, tear, 5);
-  //Move1Image(tear,50);
-  for(int i=5; i <= 50;i += 5){
-    Rotate1Image(tear,i,0.8,0.8);
-    delay(2000);
-  }
+  //test
+  Display2Image(pupil,tear);
+
 }
 
 void loop(void) {
   tft_left.setRotation(0);
   tft_right.setRotation(0);
-  //rotCombine2Images(pupil, tear, 5);
-  //Move1Image(tear,5);
 }
 
 void loop2() {
