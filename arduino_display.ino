@@ -122,6 +122,87 @@ void boundaryfill(uint16_t img[]){
   }
 }
 
+double SinXDivX(double x){
+  /*计算sinc值（插值权重）*/
+  const float a = -1; // a 用于调节锐化或模糊的程度
+  if (x < 0) x = -x; // 将 x 转为非负值
+  double x2 = x * x;
+  double x3 = x2 * x;
+  if (x <= 1)
+    return (a+2) * x3 - (a+3) * x2 + 1;
+  else if (x <= 2) 
+    return a * x3 - (5 * a) * x2 + (8 * a) * x - (4 * a);
+  else
+  return 0;
+}
+
+uint16_t PixelBound(uint16_t img[],int x, int y){
+  //限制坐标在图像范围内
+  x = (((x > 0)? x : 0) < IMAGE_HEIGHT) ? x : IMAGE_HEIGHT-1;
+  y = (((y > 0)? y : 0) < IMAGE_WIDTH) ? y : IMAGE_WIDTH-1;
+  return img[x * IMAGE_WIDTH + y];
+}
+
+uint16_t CubicConvInterpolation(uint16_t img[],float img_x,float img_y)
+{
+  /*三次卷积插值：计算一次4*4范围内的三次卷积插值*/
+  /*一维空间插值计算:x/x-1/x+1/x+2四个点进行加权平均：f(x)= ∑f(x+k)⋅W(x−(x+k))
+    其中w（x）是卷积核
+    二维三次卷积插值（分离卷积）：水平方向插值-垂直方向插值-最终插值像素值
+  */
+  int img_x0 = int(img_x);
+  if(img_x0 > img_x){--img_x0;}
+  int img_y0 = int(img_y);
+  if(img_y0 > img_y){--img_y0;}
+  float fu = img_x - img_x0; // x 方向的小数部分
+  float fv = img_y - img_y0; // y 方向的小数部分
+  uint16_t* pixel = new uint16_t[16];// 存储16个像素点
+  int x,y;
+
+  for(int i = 0; i < 4; i++){
+    for(int j = 0; j < 4;j++){
+      x = img_x0 -1 +j;// 横坐标
+      y = img_y0 -1 +i;// 纵坐标
+      pixel[i * 4 + j] = PixelBound(img,x,y);// 存储对应像素值
+    }
+  }
+  //  三次卷积插值计算
+  uint16_t R,G,B;
+  float afu[4], afv[4];
+  float sR,sG,sB,aR,aB,aG;
+  afu[0] = SinXDivX(1 + fu);
+  afu[1] = SinXDivX(fu);
+  afu[2] = SinXDivX(1 - fu);
+  afu[3] = SinXDivX(2 - fu);
+  afv[0] = SinXDivX(1 + fv);
+  afv[1] = SinXDivX(fv);
+  afv[2] = SinXDivX(1 - fv);
+  afv[3] = SinXDivX(2 - fv);
+  for(int i = 0; i < 4; i++){
+    for(int j = 0; j <4;j++){
+      // 计算横着三次插值
+      uint16_t color = pixel[i * 4 +j];
+      R = uint16_t((color >> 11) & 0x1F);
+      G = uint16_t((color >> 5) & 0x3F);
+      B = uint16_t(color & 0x1F);
+      aR += afu[j] * R;
+      aG += afu[j] * G;
+      aB += afu[j] * B;
+    }
+    // 计算竖着的插值得到最终结果
+    sR += aR * afv[i];
+    sG += aG * afv[i];
+    sB += aB * afv[i];
+  }
+  // 得到最终RGB颜色
+  R = uint16_t(sR > 31 ? 31 : (sR < 0 ? 0 : sR));
+  G = uint16_t(sG > 63 ? 63 : (sG < 0 ? 0 : sG));
+  B = uint16_t(sB > 31 ? 31 : (sB < 0 ? 0 : sB));
+  return  uint16_t((R << 11) | (G << 5) | B); 
+  delete[] pixel;
+}
+
+
 uint16_t BilinearInterpolation(uint16_t* img,float img_x, float img_y){
   /*二次插值获得像素点RGB值*/
   int img_x1 = int(img_x);
@@ -189,6 +270,7 @@ void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY)
         if (newX >= 0 && newX < IMAGE_WIDTH && newY >= 0 && newY < IMAGE_HEIGHT) {
           imageBuffer[y * IMAGE_WIDTH + x] = BilinearInterpolation(img,img_x_f,img_y_f);//二次插值获得像素值
           //imageBuffer[y * IMAGE_WIDTH + x] = img[newY * IMAGE_WIDTH + newX]; // 将旋转后的像素映射到新位置
+          //imageBuffer[y * IMAGE_WIDTH + x] = CubicConvInterpolation(img,img_x_f,img_y_f);
         }
         else if(FILLCOLOR){
             //图片缩小周围会出现一圈黑色，使用fillcolour填充不同的颜色进去
@@ -246,8 +328,70 @@ void rotCombine2Images(uint16_t img1[], uint16_t img2[]) {
       imageBuffer[i] = img2[i];
     }
   }
+  GaussBLur(imageBuffer,0.9,3);
   tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
   tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+}
+
+void GaussBLur(uint16_t img[],double sigma,int radius){
+  /*高斯平滑*/
+  /*sigma：高斯标准差,调整模糊程度 radius：高斯核半径图像质量调整*/
+  /*radius=0则等于没做*/
+  double *gaussMatrix,*pdbl;//  指向高斯核矩阵 使用pdb1遍历matrix
+  double gaussSum = 0.0;//  存储高斯和
+  double _2sigma2 = 2 * sigma * sigma;
+  int x, y, xx, yy, xxx, yyy;
+  double a,d;
+  gaussMatrix =  new double[(radius * 2 + 1) * (radius * 2 + 1) * sizeof(double)];
+  pdbl = gaussMatrix;
+    if (!gaussMatrix) {
+        return;
+    }
+  //  计算高斯核矩阵
+  for (y = -radius; y <= radius; y++) {
+    for (x = -radius; x <= radius; x++) {
+      a = exp(-(double)(x * x + y * y) / _2sigma2);
+      *pdbl++ = a;//  当前地址赋值并指向下一个地址
+      gaussSum += a;
+    }
+  }
+  //  归一化高斯核矩阵
+  pdbl = gaussMatrix;
+  for (y = -radius; y <= radius; y++) {
+    for (x = -radius; x <= radius; x++) {
+      *pdbl++ /= gaussSum;
+    }
+  }
+  //  卷积计算
+   for (y = 0; y < IMAGE_HEIGHT; y++) {   
+        for (x = 0; x < IMAGE_WIDTH; x++) {    
+            double r = 0.0, g = 0.0, b = 0.0;
+            pdbl = gaussMatrix;   
+            for (yy = -radius; yy <= radius; yy++) {   
+                yyy = y + yy;// 当前y坐标位置计算   
+                if (yyy >= 0 && yyy < IMAGE_HEIGHT) {   
+                    for (xx = -radius; xx <= radius; xx++) {   
+                        xxx = x + xx;// 当前x坐标计算   
+                        if (xxx >= 0 && xxx < IMAGE_WIDTH) {   
+                            uint16_t bbb = img[yyy * IMAGE_WIDTH + xxx];// 获得颜色值   
+                            d = *pdbl;   
+                            r += ((bbb >> 11) & 0x1F) * d;
+                            g += ((bbb >> 5) & 0x3F) * d;
+                            b += (bbb & 0x1F) * d;
+                        }   
+                        pdbl++;   
+                    }   
+                } else {   
+                    pdbl += (radius * 2 + 1);   
+                  }   
+            }
+            uint16_t R = uint16_t(r > 31 ? 31 : (r < 0 ? 0 : r));
+            uint16_t G = uint16_t(g > 63 ? 63 : (g < 0 ? 0 : g));
+            uint16_t B = uint16_t(b > 31 ? 31 : (b < 0 ? 0 : b));
+            imageBuffer[y * IMAGE_WIDTH + x] = (R << 11) | (G << 5) | B;
+          }
+    }
+  delete[] gaussMatrix; 
 }
 
 void Display2Image(uint16_t img1[],uint16_t img2[]){
@@ -261,7 +405,6 @@ void Display2Image(uint16_t img1[],uint16_t img2[]){
     Rotate1Image(img2,i,1,1);//旋转 结果放入imagebuffer
     Move1Image(imageBuffer,move_rows);//向下移动100行放入imagebuffer
     rotCombine2Images(img1,imageBuffer);//叠加
-    delay(1000);//推迟1s
   }
 }
 
@@ -294,10 +437,8 @@ void setup() {
   boundaryfill(tear);//修改为只有两种颜色
   
   Scheduler.startLoop(loop2);
-
   //test
   Display2Image(pupil,tear);
-
 }
 
 void loop(void) {
