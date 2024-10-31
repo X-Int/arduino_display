@@ -138,8 +138,8 @@ double SinXDivX(double x){
 
 uint16_t PixelBound(uint16_t img[],int x, int y){
   //限制坐标在图像范围内
-  x = (((x > 0)? x : 0) < IMAGE_HEIGHT) ? x : IMAGE_HEIGHT-1;
-  y = (((y > 0)? y : 0) < IMAGE_WIDTH) ? y : IMAGE_WIDTH-1;
+  x = (x >= 0) ? ((x < IMAGE_HEIGHT) ? x : IMAGE_HEIGHT - 1) : 0;
+  y = (y >= 0) ? ((y < IMAGE_WIDTH) ? y : IMAGE_WIDTH - 1) : 0;
   return img[x * IMAGE_WIDTH + y];
 }
 
@@ -148,15 +148,14 @@ uint16_t CubicConvInterpolation(uint16_t img[],float img_x,float img_y)
   /*三次卷积插值：计算一次4*4范围内的三次卷积插值*/
   /*一维空间插值计算:x/x-1/x+1/x+2四个点进行加权平均：f(x)= ∑f(x+k)⋅W(x−(x+k))
     其中w（x）是卷积核
-    二维三次卷积插值（分离卷积）：水平方向插值-垂直方向插值-最终插值像素值
-  */
+    二维三次卷积插值（分离卷积）：水平方向插值-垂直方向插值-最终插值像素值*/
   int img_x0 = int(img_x);
   if(img_x0 > img_x){--img_x0;}
   int img_y0 = int(img_y);
   if(img_y0 > img_y){--img_y0;}
   float fu = img_x - img_x0; // x 方向的小数部分
   float fv = img_y - img_y0; // y 方向的小数部分
-  uint16_t* pixel = new uint16_t[16];// 存储16个像素点
+  uint16_t pixel[16];// 存储16个像素点
   int x,y;
 
   for(int i = 0; i < 4; i++){
@@ -167,9 +166,9 @@ uint16_t CubicConvInterpolation(uint16_t img[],float img_x,float img_y)
     }
   }
   //  三次卷积插值计算
-  uint16_t R,G,B;
+  uint16_t R=0,G=0,B=0;
   float afu[4], afv[4];
-  float sR,sG,sB,aR,aB,aG;
+  float sR=0,sG=0,sB=0,aR=0,aB=0,aG=0;
   afu[0] = SinXDivX(1 + fu);
   afu[1] = SinXDivX(fu);
   afu[2] = SinXDivX(1 - fu);
@@ -179,6 +178,7 @@ uint16_t CubicConvInterpolation(uint16_t img[],float img_x,float img_y)
   afv[2] = SinXDivX(1 - fv);
   afv[3] = SinXDivX(2 - fv);
   for(int i = 0; i < 4; i++){
+    aR = aG = aB = 0; // 清空横向插值累加器
     for(int j = 0; j <4;j++){
       // 计算横着三次插值
       uint16_t color = pixel[i * 4 +j];
@@ -194,12 +194,11 @@ uint16_t CubicConvInterpolation(uint16_t img[],float img_x,float img_y)
     sG += aG * afv[i];
     sB += aB * afv[i];
   }
-  // 得到最终RGB颜色
+  //得到最终RGB颜色
   R = uint16_t(sR > 31 ? 31 : (sR < 0 ? 0 : sR));
   G = uint16_t(sG > 63 ? 63 : (sG < 0 ? 0 : sG));
   B = uint16_t(sB > 31 ? 31 : (sB < 0 ? 0 : sB));
   return  uint16_t((R << 11) | (G << 5) | B); 
-  delete[] pixel;
 }
 
 
@@ -268,9 +267,9 @@ void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY)
         int newX = int(img_x_f);//取整获得对应原图像中的坐标值
         int newY = int(img_y_f);
         if (newX >= 0 && newX < IMAGE_WIDTH && newY >= 0 && newY < IMAGE_HEIGHT) {
-          imageBuffer[y * IMAGE_WIDTH + x] = BilinearInterpolation(img,img_x_f,img_y_f);//二次插值获得像素值
+          //imageBuffer[y * IMAGE_WIDTH + x] = BilinearInterpolation(img,img_x_f,img_y_f);//二次插值获得像素值
           //imageBuffer[y * IMAGE_WIDTH + x] = img[newY * IMAGE_WIDTH + newX]; // 将旋转后的像素映射到新位置
-          //imageBuffer[y * IMAGE_WIDTH + x] = CubicConvInterpolation(img,img_x_f,img_y_f);
+          imageBuffer[y * IMAGE_WIDTH + x] = CubicConvInterpolation(img,img_x_f,img_y_f);
         }
         else if(FILLCOLOR){
             //图片缩小周围会出现一圈黑色，使用fillcolour填充不同的颜色进去
@@ -292,7 +291,7 @@ void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY)
   //   img[i] = imageBuffer[i];//把旋转后的图像数组重新放回源数组中
   // }
   // boundaryfill(img);
-  //boundaryfill(imageBuffer);
+
 }
 
 void Move1Image(uint16_t img[],int changeNumrows){
@@ -328,7 +327,7 @@ void rotCombine2Images(uint16_t img1[], uint16_t img2[]) {
       imageBuffer[i] = img2[i];
     }
   }
-  GaussBLur(imageBuffer,0.9,3);
+  GaussBLur(imageBuffer,1.1,3);
   tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
   tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
@@ -395,16 +394,21 @@ void GaussBLur(uint16_t img[],double sigma,int radius){
 }
 
 void Display2Image(uint16_t img1[],uint16_t img2[]){
-  int move_rows = 100;
-  Rotate1Image(img2,0,0.8,0.8);//缩小后的结果放在imagebufffer中
+  int move_rows = 140;
+  Rotate1Image(img1,0,0.9,0.9);
+  for(int i = 0;i < IMAGE_SIZE;i++){
+    img1[i] = imageBuffer[i];
+  }
+  Rotate1Image(img2,0,0.8,0.8);// 缩小后的结果放在imagebufffer中
   for(int i = 0;i < IMAGE_SIZE;i++){
     img2[i] = imageBuffer[i];
-      //转移到image2上，每次旋转以img2作为旋转源图转不同的角度会比在imagebuffer上累加旋转图像清晰
+      //  转移到image2上，每次旋转以img2作为旋转源图转不同的角度会比在imagebuffer上累加旋转
   }
   for(int i=10;i<=100;i+=10){
-    Rotate1Image(img2,i,1,1);//旋转 结果放入imagebuffer
-    Move1Image(imageBuffer,move_rows);//向下移动100行放入imagebuffer
-    rotCombine2Images(img1,imageBuffer);//叠加
+    Rotate1Image(img2,i,1,1);// 旋转 结果放入imagebuffer
+    Move1Image(imageBuffer,move_rows);//  向下移动100行放入imagebuffer
+    rotCombine2Images(img1,imageBuffer);//  叠加
+
   }
 }
 
