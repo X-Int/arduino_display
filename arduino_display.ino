@@ -50,6 +50,8 @@ uint16_t fillcolour[] = {
 //定义图片的初始坐标位置
 int image_x = 0;
 int image_y = 0;
+double *gaussMatrix = nullptr;
+int gaussRadius = 0;
 
 //define touchpoints
 #define MAX_DOUBLE_TOUCH 5
@@ -233,7 +235,7 @@ uint16_t BilinearInterpolation(uint16_t* img,float img_x, float img_y){
   return color;
 }
 
-void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY){
+void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY,int resize){
   /*平移、旋转和缩放图片：*/
   /*ZoomX、ZoomY为沿着X/Y轴的缩放系数*/
   /*rotaryangle为旋转角度 默认旋转方向是逆时针*/
@@ -270,10 +272,12 @@ void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY)
           //imageBuffer[y * IMAGE_WIDTH + x] = BilinearInterpolation(img,img_x_f,img_y_f);//二次插值获得像素值
           //imageBuffer[y * IMAGE_WIDTH + x] = img[newY * IMAGE_WIDTH + newX]; // 将旋转后的像素映射到新位置
           imageBuffer[y * IMAGE_WIDTH + x] = CubicConvInterpolation(img,img_x_f,img_y_f);
+          if(imageBuffer[y * IMAGE_WIDTH + x] == 0){imageBuffer[y * IMAGE_WIDTH + x] = fillcolour[0];}
         }
-        else if(FILLCOLOR){
+        else if(FILLCOLOR || resize){
             //图片缩小周围会出现一圈黑色，使用fillcolour填充不同的颜色进去
           imageBuffer[y * IMAGE_WIDTH + x] = fillcolour[0];//填充白色
+          if(imageBuffer[y * IMAGE_WIDTH + x] == 0){imageBuffer[y * IMAGE_WIDTH + x] = fillcolour[0];}
         }
         img_x_f += Ax;
         img_y_f += Ay;
@@ -282,16 +286,15 @@ void Rotate1Image(uint16_t img[], double Rotaryangle,double ZoomX, double ZoomY)
     img0_y += By;
   }
   //填补出现的0(由于缩小使得边界出现一串0)
-  for(int i=0;i<total_pixels;i++){
-    if(imageBuffer[i] == 0){
-      imageBuffer[i] = fillcolour[0];
-      }
-  }
+  // for(int i=0;i<total_pixels;i++){
+  //   if(imageBuffer[i] == 0){
+  //     imageBuffer[i] = fillcolour[0];
+  //     }
+  // }
   // for(int i=0; i< total_pixels;i++){
   //   img[i] = imageBuffer[i];//把旋转后的图像数组重新放回源数组中
   // }
   // boundaryfill(img);
-
 }
 
 void Move1Image(uint16_t img[],int changeNumrows){
@@ -303,12 +306,18 @@ void Move1Image(uint16_t img[],int changeNumrows){
     num_pixels = total_pixels;
   }
   if(changeNumrows >0){
-    memmove(&imageBuffer[num_pixels], &img[0], (total_pixels - num_pixels) * sizeof(uint16_t));
+    //memmove(&imageBuffer[num_pixels], &img[0], (total_pixels - num_pixels) * sizeof(uint16_t));
+    for (int i = total_pixels - 1; i >= num_pixels; i--) {
+      imageBuffer[i] = img[i - num_pixels];
+    }
     for(int i = 0;i < num_pixels;i++){
       imageBuffer[i] = 0XFFFF;//white
   }
   }else if(changeNumrows < 0){
-    memmove(&imageBuffer[0], &img[num_pixels], (total_pixels - num_pixels) * sizeof(uint16_t));
+    //memmove(&imageBuffer[0], &img[num_pixels], (total_pixels - num_pixels) * sizeof(uint16_t));
+     for (int i = 0; i < total_pixels - num_pixels; i++) {
+      imageBuffer[i] = img[i + num_pixels];
+    }
     // 填充下方空白部分为白色
     for (int i = total_pixels - num_pixels; i < total_pixels; i++) {
       imageBuffer[i] = 0xFFFF; // white
@@ -327,88 +336,96 @@ void rotCombine2Images(uint16_t img1[], uint16_t img2[]) {
       imageBuffer[i] = img2[i];
     }
   }
-  GaussBLur(imageBuffer,1.1,3);
+  GaussBLur2(imageBuffer,1.1,3);
   tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
   tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
 
-void GaussBLur(uint16_t img[],double sigma,int radius){
-  /*高斯平滑*/
-  /*sigma：高斯标准差,调整模糊程度 radius：高斯核半径图像质量调整*/
-  /*radius=0则等于没做*/
-  double *gaussMatrix,*pdbl;//  指向高斯核矩阵 使用pdb1遍历matrix
-  double gaussSum = 0.0;//  存储高斯和
+void initGaussMatrix(double sigma, int radius) {
+  if (gaussMatrix) {
+    delete[] gaussMatrix;
+  }
+  gaussRadius = radius;
+  gaussMatrix = new double[(radius * 2 + 1)];
+  double gaussSum = 0.0;
   double _2sigma2 = 2 * sigma * sigma;
-  int x, y, xx, yy, xxx, yyy;
-  double a,d;
-  gaussMatrix =  new double[(radius * 2 + 1) * (radius * 2 + 1) * sizeof(double)];
-  pdbl = gaussMatrix;
-    if (!gaussMatrix) {
-        return;
-    }
-  //  计算高斯核矩阵
-  for (y = -radius; y <= radius; y++) {
-    for (x = -radius; x <= radius; x++) {
-      a = exp(-(double)(x * x + y * y) / _2sigma2);
-      *pdbl++ = a;//  当前地址赋值并指向下一个地址
-      gaussSum += a;
+
+  for (int x = -radius; x <= radius; x++) {
+    double a = exp(-(double)(x * x) / _2sigma2);
+    gaussMatrix[x + radius] = a;
+    gaussSum += a;
+  }
+  // 归一化
+  for (int x = 0; x <= 2 * radius; x++) {
+    gaussMatrix[x] /= gaussSum;
+  }
+}
+
+void GaussBLur2(uint16_t img[], double sigma, int radius) {
+  if (radius == 0 || !gaussMatrix || gaussRadius != radius) {
+    initGaussMatrix(sigma, radius);
+  }
+  // 水平模糊
+  for (int y = 0; y < IMAGE_HEIGHT; y++) {
+    for (int x = 0; x < IMAGE_WIDTH; x++) {
+      double r = 0.0, g = 0.0, b = 0.0;
+      for (int xx = -radius; xx <= radius; xx++) {
+        int xxx = x + xx;
+        if (xxx >= 0 && xxx < IMAGE_WIDTH) {
+          uint16_t color = img[y * IMAGE_WIDTH + xxx];
+          double weight = gaussMatrix[xx + radius];
+          r += ((color >> 11) & 0x1F) * weight;
+          g += ((color >> 5) & 0x3F) * weight;
+          b += (color & 0x1F) * weight;
+        }
+      }
+      uint16_t R = uint16_t(r > 31 ? 31 : (r < 0 ? 0 : r));
+      uint16_t G = uint16_t(g > 63 ? 63 : (g < 0 ? 0 : g));
+      uint16_t B = uint16_t(b > 31 ? 31 : (b < 0 ? 0 : b));
+      imageBuffer[y * IMAGE_WIDTH + x] = (R << 11) | (G << 5) | B;
     }
   }
-  //  归一化高斯核矩阵
-  pdbl = gaussMatrix;
-  for (y = -radius; y <= radius; y++) {
-    for (x = -radius; x <= radius; x++) {
-      *pdbl++ /= gaussSum;
+  // 垂直模糊
+  for (int x = 0; x < IMAGE_WIDTH; x++) {
+    for (int y = 0; y < IMAGE_HEIGHT; y++) {
+      double r = 0.0, g = 0.0, b = 0.0;
+      for (int yy = -radius; yy <= radius; yy++) {
+        int yyy = y + yy;
+        if (yyy >= 0 && yyy < IMAGE_HEIGHT) {
+          uint16_t color = imageBuffer[yyy * IMAGE_WIDTH + x];
+          double weight = gaussMatrix[yy + radius];
+          r += ((color >> 11) & 0x1F) * weight;
+          g += ((color >> 5) & 0x3F) * weight;
+          b += (color & 0x1F) * weight;
+        }
+      }
+      uint16_t R = uint16_t(r > 31 ? 31 : (r < 0 ? 0 : r));
+      uint16_t G = uint16_t(g > 63 ? 63 : (g < 0 ? 0 : g));
+      uint16_t B = uint16_t(b > 31 ? 31 : (b < 0 ? 0 : b));
+      img[y * IMAGE_WIDTH + x] = (R << 11) | (G << 5) | B;
     }
   }
-  //  卷积计算
-   for (y = 0; y < IMAGE_HEIGHT; y++) {   
-        for (x = 0; x < IMAGE_WIDTH; x++) {    
-            double r = 0.0, g = 0.0, b = 0.0;
-            pdbl = gaussMatrix;   
-            for (yy = -radius; yy <= radius; yy++) {   
-                yyy = y + yy;// 当前y坐标位置计算   
-                if (yyy >= 0 && yyy < IMAGE_HEIGHT) {   
-                    for (xx = -radius; xx <= radius; xx++) {   
-                        xxx = x + xx;// 当前x坐标计算   
-                        if (xxx >= 0 && xxx < IMAGE_WIDTH) {   
-                            uint16_t bbb = img[yyy * IMAGE_WIDTH + xxx];// 获得颜色值   
-                            d = *pdbl;   
-                            r += ((bbb >> 11) & 0x1F) * d;
-                            g += ((bbb >> 5) & 0x3F) * d;
-                            b += (bbb & 0x1F) * d;
-                        }   
-                        pdbl++;   
-                    }   
-                } else {   
-                    pdbl += (radius * 2 + 1);   
-                  }   
-            }
-            uint16_t R = uint16_t(r > 31 ? 31 : (r < 0 ? 0 : r));
-            uint16_t G = uint16_t(g > 63 ? 63 : (g < 0 ? 0 : g));
-            uint16_t B = uint16_t(b > 31 ? 31 : (b < 0 ? 0 : b));
-            imageBuffer[y * IMAGE_WIDTH + x] = (R << 11) | (G << 5) | B;
-          }
-    }
-  delete[] gaussMatrix; 
 }
 
 void Display2Image(uint16_t img1[],uint16_t img2[]){
   int move_rows = 140;
-  Rotate1Image(img1,0,0.9,0.9);
+  Rotate1Image(img1,0,0.9,0.9,1);
   for(int i = 0;i < IMAGE_SIZE;i++){
     img1[i] = imageBuffer[i];
   }
-  Rotate1Image(img2,0,0.8,0.8);// 缩小后的结果放在imagebufffer中
+  Rotate1Image(img2,0,0.8,0.8,1);// 缩小后的结果放在imagebufffer中
   for(int i = 0;i < IMAGE_SIZE;i++){
     img2[i] = imageBuffer[i];
       //  转移到image2上，每次旋转以img2作为旋转源图转不同的角度会比在imagebuffer上累加旋转
   }
   for(int i=10;i<=100;i+=10){
-    Rotate1Image(img2,i,1,1);// 旋转 结果放入imagebuffer
+    float start = micros();
+    Rotate1Image(img2,i,1,1,0);// 旋转 结果放入imagebuffer
     Move1Image(imageBuffer,move_rows);//  向下移动100行放入imagebuffer
     rotCombine2Images(img1,imageBuffer);//  叠加
-
+    float end = (micros() - start) / 1000000;
+    Serial.print("time:");
+    Serial.println(end);
   }
 }
 
