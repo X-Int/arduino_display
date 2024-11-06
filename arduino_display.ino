@@ -5,6 +5,9 @@
 #include <Scheduler.h>
 #include <cst816t.h>
 
+#include "tears.h"// 引用定义的图片
+#include "pupil_0.h"
+
 #define TOUCH 0
 #define FILLCOLOR 1
 #define TFT_CS 23  // 23 Chip select
@@ -19,25 +22,29 @@
 #define TFT1_DC 22  // Data/command
 
 Adafruit_GC9A01A tft_left(TFT_CS, TFT_DC);
-Adafruit_GC9A01A tft_right(TFT1_CS, TFT_DC);
+//Adafruit_GC9A01A tft_right(TFT1_CS, TFT_DC);
 //两个显示屏除了cs引脚不同以外，其他的引脚均保持一致（dc rst都一致）
 //触屏CTP_RST 与tft1/2_RST也可以接在一起 也可以不接一起--->接开发板的RESET
 
 //定义图片
-extern const unsigned char gImage_pupil[];
-extern const unsigned char gImage_tear[];//879F FFFF
-//定义图片指针
-const unsigned char* images[] = {
-  gImage_pupil,
-  gImage_tear,
-};
+// extern const unsigned char gImage_pupil[];
+// extern const unsigned char gImage_tear[];//879F FFFF
+// //定义图片指针
+// const unsigned char* images[] = {
+//   gImage_pupil,
+//   gImage_tear,
+// };
+//extern const uint16_t pupil_0[];
 
 //创建画布
 #define IMAGE_HEIGHT 240
 #define IMAGE_WIDTH 240
 #define IMAGE_SIZE IMAGE_HEIGHT* IMAGE_WIDTH
-uint16_t imageBuffer[IMAGE_SIZE], pupil[IMAGE_SIZE], tear[IMAGE_SIZE];
-int positions[240][2];
+#define TEAR_SIZE tear_0_height * tear_0_width
+#define PUPIL_SIZE IMAGE_SIZE
+uint16_t imageBuffer[IMAGE_SIZE];
+//uint16_t pupil[IMAGE_SIZE], tear[IMAGE_SIZE];
+
 uint16_t fillcolour[] = {
   0XFFFF,//白色
   0XF800,//红色
@@ -46,6 +53,15 @@ uint16_t fillcolour[] = {
   0XFFE0,//黄色
   0X0000,//黑色
 };
+
+uint16_t* tears_list[] = {
+  tear_0,
+  tear_1,
+  tear_2,
+  tear_3,
+  tear_4,
+};
+const int TEARS_LIST_SIZE = sizeof(tears_list) / sizeof(tears_list[0]);
 
 //定义图片的初始坐标位置
 int image_x = 0;
@@ -81,11 +97,11 @@ void doubleclick_gesture() {
     tft_left.drawRGBBitmap(image_x, image_y, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
   }
 }
-void Serprint(uint16_t img[]){
+void Serprint(uint16_t img[],int height, int width ){
   Serial.println("IMG:");
-  for(int i=0;i<IMAGE_HEIGHT;i++){
-    for(int j=0; j<IMAGE_WIDTH;j++){
-      Serial.print(img[i*IMAGE_WIDTH+j],HEX);
+  for(int i=0;i<height;i++){
+    for(int j=0; j<width;j++){
+      Serial.print(img[i*width+j],HEX);
       Serial.print(' ');
     }
     Serial.println();
@@ -202,7 +218,6 @@ uint16_t CubicConvInterpolation(uint16_t img[],float img_x,float img_y)
   B = uint16_t(sB > 31 ? 31 : (sB < 0 ? 0 : sB));
   return  uint16_t((R << 11) | (G << 5) | B); 
 }
-
 
 uint16_t BilinearInterpolation(uint16_t* img,float img_x, float img_y){
   /*二次插值获得像素点RGB值*/
@@ -336,8 +351,35 @@ void rotCombine2Images(uint16_t img1[], uint16_t img2[]) {
       imageBuffer[i] = img2[i];
     }
   }
-  GaussBLur2(imageBuffer,1.1,3);
-  tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  //GaussBLur2(imageBuffer,1.1,3);
+  //tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+}
+
+void newCombine2Images(uint16_t img1[], uint16_t img2[],int counter){
+  /*img1:pupil img2:tear*/
+  // int combine_pixel = TEAR_SIZE;//需要融合的像素点总和 20400
+  // int total_pixel = IMAGE_SIZE;//所有的像素点总和 240*240
+  /*如果为0说明imagebuffer的上部分是空的,则需要填充为pupil,填完一次后之后则不需要重复填充*/
+  int j = 0;
+  for(int i = IMAGE_SIZE - TEAR_SIZE ; i < IMAGE_SIZE; i++){
+    if(img2[j] == 0xFFFF){
+      imageBuffer[i] = img1[i];
+      if(j < TEAR_SIZE){j += 1;}
+    }
+    else{
+      imageBuffer[i] = img2[j];
+      if(j < TEAR_SIZE){j += 1;}
+    }
+  }
+  if(counter == 0){
+    for(int i=0; i < IMAGE_SIZE - TEAR_SIZE; i++){
+      imageBuffer[i] = img1[i];
+    }
+  }
+  // Serial.print("imagebuffer:");
+  // Serprint(imageBuffer,240,240);
+  //tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
   tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
 
@@ -429,15 +471,26 @@ void Display2Image(uint16_t img1[],uint16_t img2[]){
   }
 }
 
+void newDisplay2Image(uint16_t img1[],uint16_t* img2[]){
+  //int amount = TEARS_LIST_SIZE;
+  for(int i=0;i < TEARS_LIST_SIZE ;i++){
+    float start = micros();
+    newCombine2Images(img1,img2[i],i);
+    float end = (micros() - start) / 1000000;
+    Serial.print("time:");
+    Serial.println(end);
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println("GC9A01A Test!");
 
   //open the screen
   tft_left.begin();
-  tft_right.begin();
+  //tft_right.begin();
   tft_left.setRotation(0);
-  tft_right.setRotation(0);
+  //tft_right.setRotation(0);
 
 #if defined(TFT_BL)
   pinMode(TFT_BL, OUTPUT);
@@ -453,18 +506,24 @@ void setup() {
   touchpad.begin(mode_motion);
   Serial.println(touchpad.version());
 
-  gImage2image(gImage_tear, tear);
-  gImage2image(gImage_pupil, pupil);
-  boundaryfill(tear);//修改为只有两种颜色
+  // gImage2image(gImage_tear, tear);
+  // gImage2image(gImage_pupil, pupil);
+  // boundaryfill(tear);//修改为只有两种颜色
   
   Scheduler.startLoop(loop2);
   //test
-  Display2Image(pupil,tear);
+  // Display2Image(pupil,tear);
+  // Serial.print("pupil_0:");
+  // Serprint(tear_0,tear_0_height,tear_0_width);
+  //newCombine2Images(pupil_0,tears_list[0],0);
+  // tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  // tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  newDisplay2Image(pupil_0,tears_list);
 }
 
 void loop(void) {
   tft_left.setRotation(0);
-  tft_right.setRotation(0);
+  //tft_right.setRotation(0);
 }
 
 void loop2() {
