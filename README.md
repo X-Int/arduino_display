@@ -6,6 +6,7 @@ Arduino driver of two round displays to show eye emojis.
 * Use the tool `Image2Lcd` to convert images into C arrays, choose `16-bit TrueColor` and untick `include header data`
 * Pin connection:
 ```C
+arduino_giga:
  TFT_CS 23  // Chip select
  TFT_DC 22  // Data/command
  TFT_BL 24  // Backlight control
@@ -21,6 +22,24 @@ Arduino driver of two round displays to show eye emojis.
  RST 52
  servo1 2
  servo2 3
+
+RP2040 PICO:
+TFT_MISO 0 // RX PIN - Not Connected in display
+TFT_SCLK 2 // In display, connect to SCL
+TFT_MOSI 3 // In display, connect to SDA
+TFT_CS   20  // In display, connect to CS
+TFT_DC   18  // In display, connect to DC
+TFT_RST  19  // In display, connect to RES
+TFT_BL   17            // In display, connect to BLK
+TFT_BACKLIGHT_ON HIGH  // Level to turn ON back-light (HIGH or LOW)
+TFT2_MISO 0 // RX PIN - Not Connected in display
+TFT2_SCLK 2 // In display, connect to SCL
+TFT2_MOSI 3 // In display, connect to SDA
+TFT2_CS   22  // In display, connect to CS
+TFT2_DC   18  // In display, connect to DC
+TFT2_RST  19  // In display, connect to RES
+TFT2_BL   17            // In display, connect to BLK
+TFT2_BACKLIGHT_ON HIGH  
 ``` 
 * Functions：
  1. 显示眼神图片 photoText()
@@ -32,3 +51,8 @@ Arduino driver of two round displays to show eye emojis.
  1.main
  2.new_looks :本地处理图片并融合显示
  3.new_looks2:python处理好的数组放入 融合显示
+
+ files：
+ 1.rp_espi:RP2040 PICO display
+ 2.nano_display: nano IoT display
+ 3.arduino_dislay: arduino giga display

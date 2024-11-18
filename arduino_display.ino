@@ -22,9 +22,11 @@
 #define CTP_INT 25
 #define TFT1_CS 31  // Chip select
 #define TFT1_DC 22  // Data/command
+#define TFT2_CS 51
 
-Adafruit_GC9A01A tft_left(TFT_CS, TFT_DC);
+//Adafruit_GC9A01A tft_left(TFT_CS, TFT_DC);
 //Adafruit_GC9A01A tft_right(TFT1_CS, TFT_DC);
+Adafruit_GC9A01A tft(TFT2_CS, TFT_DC);
 //两个显示屏除了cs引脚不同以外，其他的引脚均保持一致（dc rst都一致）
 //触屏CTP_RST 与tft1/2_RST也可以接在一起 也可以不接一起--->接开发板的RESET
 
@@ -84,13 +86,15 @@ uint16_t lowByte, highByte;
 
 //启用DMA：
 #define BUFFER_SIZE 1024
-#ifdef USE_DMA
-  #define BUFFERS 2
-#else
-  #define BUFFERS 1
-#endif
-//uint16_t pbuffer[BUFFERS][BUFFER_SIZE]; // Pixel rendering buffer
-bool     dmaBuf   = 0;                  // DMA buffer selection
+// #ifdef USE_DMA
+//   #define BUFFERS 2
+// #else
+//   #define BUFFERS 1
+// #endif
+// //uint16_t pbuffer[BUFFERS][BUFFER_SIZE]; // Pixel rendering buffer
+// bool     dmaBuf   = 0;                  // DMA buffer selection
+
+// touchpad
 
 // void doubleclick_gesture() {
 //   if (doubleclick_count < MAX_DOUBLE_TOUCH) {
@@ -366,7 +370,7 @@ void rotCombine2Images(uint16_t img1[], uint16_t img2[]) {
   }
   //GaussBLur2(imageBuffer,1.1,3);
   //tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-  tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  //tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
 
 void newCombine2Images(uint16_t img1[], uint16_t img2[], int counter) {
@@ -392,7 +396,7 @@ void newCombine2Images(uint16_t img1[], uint16_t img2[], int counter) {
   // Serial.print("imagebuffer:");
   // Serprint(imageBuffer,240,240);
   //tft_right.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
-  tft_left.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
+  tft.drawRGBBitmap(0, 0, imageBuffer, IMAGE_WIDTH, IMAGE_HEIGHT);
 }
 
 void initGaussMatrix(double sigma, int radius) {
@@ -503,9 +507,11 @@ void setup() {
   // SPI.beginTransaction(SPISettings(24000000, MSBFIRST,SPI_MODE0));
 
   //open the screen
-  tft_left.begin();
+  //tft_left.begin();
+  tft.begin();
+  tft.setRotation(0);
   //tft_right.begin();
-  tft_left.setRotation(0);
+  //tft_left.setRotation(0);
   //tft_right.setRotation(0);
 
 #if defined(TFT_BL)
@@ -538,8 +544,10 @@ void setup() {
 }
 
 void loop(void) {
-  tft_left.setRotation(0);
+  //tft_left.setRotation(0);
   //tft_right.setRotation(0);
+  tft.setRotation(0);
+
 }
 
 void loop2() {
