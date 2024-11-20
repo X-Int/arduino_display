@@ -43,8 +43,8 @@ TFT_eSPI tft = TFT_eSPI();       // Invoke custom library
 #define RED        0xF800
 #define WHITE      0xFFFF
 
-#define YBOTTOM  123  // Ball Y coordinate at bottom
-#define YBOUNCE -3.5  // Upward velocity on ball bounce
+#define YBOTTOM  123  // Ball Y coordinate at bottom 球的底部y坐标
+#define YBOUNCE -3.5  // Upward velocity on ball bounce 球向上的初始速度 模拟弹跳
 
 // Ball coordinates are stored floating-point because screen refresh
 // is so quick, whole-pixel movements are just too fast!
@@ -56,13 +56,16 @@ int   balloldx  = ballx, balloldy = bally;   // Prior ball position
 // Working buffer for ball rendering...2 scan lines that alternate,
 // one is rendered while the other is transferred via DMA.
 uint16_t renderbuf[2][SCREENWIDTH];
+//定义了一个双缓冲区（二维数组）：一行渲染另一行DMA传输到屏幕提高刷新率
 
-uint16_t palette[16]; // Color table for ball rotation effect
+uint16_t palette[16]; 
+// Color table for ball rotation effect 颜色调色板
 
 uint32_t startTime, frame = 0; // For frames-per-second estimate
+//记录开始时间以及帧计数器
 
 void tft_begin(){
-  pinMode(firstScreenCS, OUTPUT);
+  pinMode(firstScreenCS, OUTPUT);//设定为输出模式
   digitalWrite(firstScreenCS, HIGH);
   
   pinMode(secondScreenCS, OUTPUT);
@@ -88,13 +91,14 @@ void setup() {
 
   //tft.begin();
   digitalWrite(firstScreenCS, LOW);
-  tft.setRotation(3); // Landscape orientation, USB at bottom right
+  tft.setRotation(3); // 横屏模式Landscape orientation, USB at bottom right
   tft.setSwapBytes(false);
   // Draw initial frame buffer contents:
   //tft.setBitmapColor(GRIDCOLOR, BGCOLOR);
   tft.fillScreen(BGCOLOR);
-  tft.initDMA();
+  tft.initDMA();//初始化DMA
   tft.drawBitmap(0, 0, (const uint8_t *)background, SCREENWIDTH, SCREENHEIGHT, GRIDCOLOR);
+  //填充背景
   digitalWrite(firstScreenCS, HIGH);
 
   digitalWrite(secondScreenCS, LOW);
@@ -113,9 +117,9 @@ void setup() {
 
 void loop() {
 
-  balloldx = (int16_t)ballx; // Save prior position
-  balloldy = (int16_t)bally;
-  ballx   += ballvx;         // Update position
+  balloldx = (int16_t)ballx; // 保存原来的X坐标
+  balloldy = (int16_t)bally;//y坐标
+  ballx   += ballvx;         // 更新坐标
   bally   += ballvy;
   ballvy  += 0.06;          // Update Y velocity
   if((ballx <= 15) || (ballx >= SCREENWIDTH - BALLWIDTH))
@@ -124,7 +128,6 @@ void loop() {
     bally  = YBOTTOM;        // Clip and
     ballvy = YBOUNCE;        // bounce up
   }
-
   // Determine screen area to update.  This is the bounds of the ball's
   // prior and current positions, so the old ball is fully erased and new
   // ball is fully drawn.
@@ -213,10 +216,9 @@ void loop() {
            by2  = miny - (int)bally, // Y relative to ball bitmap (can be negative)
            bgx2 = minx,              // X relative to background bitmap (>= 0)
            bgy2 = miny,              // Y relative to background bitmap (>= 0)
-           x2, y2, bx2, bgx2;         // Loop counters and working vars
+           x2, y2, bx12, bgx12;         // Loop counters and working vars
   uint8_t  p2;                       // 'packed' value of 2 ball pixels
   int8_t bufIdx2 = 0;
-
   // Start SPI transaction and drop TFT_CS - avoids transaction overhead in loop
   tft.startWrite();
   // Set window area to pour pixels into
@@ -224,8 +226,8 @@ void loop() {
   // Draw line by line loop
   for(y=0; y<height; y++) { // For each row...
     destPtr2 = &renderbuf[bufIdx2][0];
-    bx12  = bx2;  // Need to keep the original bx and bgx values,
-    bgx12 = bgx2; // so copies of them are made here (and changed in loop below)
+    bx12  = bx12;  // Need to keep the original bx and bgx values,
+    bgx12 = bgx12; // so copies of them are made here (and changed in loop below)
     for(x=0; x<width; x++) {
       if((bx12 >= 0) && (bx12 < BALLWIDTH) &&  // Is current pixel row/column
          (by2  >= 0) && (by2  < BALLHEIGHT)) { // inside the ball bitmap area?
